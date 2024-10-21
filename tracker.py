@@ -25,7 +25,9 @@ class node_process(threading.Thread):
 
                     self.node_socket.sendall(reply.encode('utf-8'))
                 else:
-                    reply = f'Your wanted file is in destination: {self.addr}'
+
+                    host,port = next(iter(file_name[node_require]))
+                    reply = f'{host}:{port}'
 
                     self.node_socket.sendall(reply.encode('utf-8'))
 
@@ -44,7 +46,7 @@ class node_process(threading.Thread):
                     node_socket_list.remove(i)
                     i.close()
 class Tracker:
-    def __init__(self, host = 'localhost', port = 1234):
+    def __init__(self, host = 'localhost', port = 1235):
         self.host = host
         self.port = port
         self.tracker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -62,11 +64,12 @@ class Tracker:
             file_list = json.loads(data)
 
             for f in file_list:
+                if f not in file_name:
+                    file_name[f] = set()  # Khởi tạo tập hợp nếu tệp chưa tồn tại
                 file_name[f].add(addr)
                 print(f)
             
-            one_node_socket = node_process(node_socket,addr)
-
+            one_node_socket = node_process(node_socket,addr)    
             one_node_socket.start()
         
 

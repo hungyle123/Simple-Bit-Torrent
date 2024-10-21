@@ -15,7 +15,7 @@ def receive_messages(client_socket):
 
 def main():
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('localhost', 1234))
+    client_socket.connect(('localhost', 52550))
 
     # Start a thread to continuously receive messages from the server
     receive_thread = threading.Thread(target=receive_messages, args=(client_socket,))
