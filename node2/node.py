@@ -2,6 +2,9 @@ import threading
 import os
 import json
 import socket
+import base64
+import time
+
 
 class uploading(threading.Thread):
     def __init__(self, node_host = 'localhost', node_port = 1):
@@ -32,68 +35,145 @@ class uploading(threading.Thread):
 
         self.upload_socket.close()
 
-class Node:
-    def __init__(self, host = 'localhost', port = 1235):
+import hashlib
+import bencodepy
+
+def calculate_hash(file_path):
+    """Tính toán hash SHA-1 cho một tệp."""
+    sha1 = hashlib.sha1()
+    with open(file_path, 'rb') as f:
+        while True:
+            data = f.read(65536)  # Đọc 64KB mỗi lần
+            if not data:
+                break
+            sha1.update(data)
+    return sha1.digest()
+
+def create_torrent(input_path, tracker_url):
+    """Tạo tệp torrent cho một file hoặc một thư mục."""
+    files_info = []
+    pieces = b""
+
+    if os.path.isfile(input_path):  # Trường hợp input là một file
+        file_hash = calculate_hash(input_path)
+        file_length = os.path.getsize(input_path)
+
+        files_info.append({
+            'length': file_length,
+            'path': [os.path.basename(input_path)]  # Lưu tên file
+        })
+        pieces += file_hash  # Hash của file
+
+    else:  # Trường hợp input là một thư mục
+        # Duyệt qua tất cả các tệp trong thư mục
+        for root, dirs, files in os.walk(input_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                file_hash = calculate_hash(file_path)
+                file_length = os.path.getsize(file_path)
+
+                # Thêm thông tin tệp vào danh sách
+                files_info.append({
+                    'length': file_length,
+                    'path': [os.path.relpath(file_path, input_path)]  # Lưu đường dẫn tương đối
+                })
+
+                # Thêm mã hash của tệp vào danh sách mã hash
+                pieces += file_hash
+
+    # Tạo cấu trúc tệp torrent
+    torrent_data = {
+        'announce': tracker_url,
+        'info': {
+            'files': files_info,
+            'name': os.path.basename(input_path),
+            'piece length': 262144,  # Kích thước mảnh (ví dụ: 256KB)
+            'pieces': pieces,
+        }
+    }
+
+    # Encode dữ liệu torrent
+    encoded_torrent = bencodepy.encode(torrent_data)
+    
+    # Lưu tệp torrent vào thư mục hiện tại
+    # torrent_filename = f"{os.path.basename(input_path)}.torrent"
+    # with open(torrent_filename, 'wb') as torrent_file:
+    #     torrent_file.write(encoded_torrent)
+    
+    # print(f"Tệp torrent đã được lưu trữ với tên: {torrent_filename}")
+
+    return encoded_torrent
+
+class internet_process(threading.Thread):
+    def __init__(self, host='localhost', port=1234):
+        threading.Thread.__init__(self)
         self.host = host
         self.port = port
         self.node_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.node_socket.connect((host,port))
+        try:
+            self.node_socket.connect((self.host, self.port))
+            print(f"Connected to the internet process at {self.host}:{self.port}")
+        except Exception as e:
+            print(f"Error connecting to {self.host}:{self.port} - {e}")
 
-        file_have = []
-
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-
-        for f in os.listdir(current_dir):
-            if f.endswith('.txt'):
-                file_have.append(f)
-
-        data = json.dumps(file_have)
-
-        self.node_socket.sendall(data.encode('utf-8'))
-
-        node_host, node_port = self.node_socket.getsockname()
-
-        upload = uploading(node_host,node_port)
-        upload.start()
-
+    def run(self):
         try:
             while True:
-                file_need = input("input: ")
-                self.node_socket.sendall(file_need.encode('utf-8'))
-                
-                message = self.node_socket.recv(1024).decode('utf-8')
+                request = input('input: ')
 
-                print(message)
+                self.node_socket.sendall(request.encode('utf-8'))
 
-                if message != "Your wanted file is not in the Bittorrent right now!":
-                    cleaned_message = message
-                    print(f"Cleaned message: {cleaned_message}")  # In ra thông điệp đã làm sạch
-                    server_ip, server_port = cleaned_message.split(':')
+                file_have = []
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                current_file = os.path.basename(__file__)
 
-                    print(server_ip)
-                    print('127.0.0.1')
-                    print(server_port)
-                    server_port = int(server_port) 
+                print(current_dir)
 
-                    get_file = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    get_file.connect(('127.0.0.1',server_port))
+                for f in os.listdir(current_dir):
+                    full_path = os.path.join(current_dir, f)
 
-                    get_file.sendall(file_need.encode('utf-8'))
+                    print(full_path)
 
-                    with open(file_need,"wb") as f:
-                        while True:
-                            data = get_file.recv(1024)
-
-                            if not data:
-                                break
-
-                            f.write(data)
+                    if os.path.isfile(full_path):  # If it's a file
+                        torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
+                        # Encode the bytes to base64 string
+                        file_have.append(torrent_content)
                     
-                    get_file.close()
-                else:
-                    print('That file is not in the Bittorrent')
+                    elif os.path.isdir(full_path):  # If it's a directory
+                        torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
+                        # Encode the bytes to base64 string
+                        file_have.append(torrent_content)
+
+                self.node_socket.sendall(len(file_have).to_bytes(8,'big'))
+
+                # Send the list of files that the node has
+                for file_path in file_have:
+                    #data = json.dumps({"torrent_content": file_path})  # Wrap it in a dict for clarity
+                    self.send_torrent(file_path)
+                    time.sleep(2)
+
+        except Exception as e:
+            print(f"Error during communication: {e}")
         finally:
             self.node_socket.close()
+
+    def send_torrent(self,torrent_content):
+        
+        self.node_socket.sendall(len(torrent_content).to_bytes(8,'big'))
+
+        self.node_socket.sendall(torrent_content)
+        print('Torrent file sent.')
+
+
+class Node:
+    def __init__(self, host = 'localhost', port = 1234):
+        
+        node_internet_process = internet_process(host,port)
+
+        node_internet_process.start()
+
+        node_internet_process.join()
+            
 
 
 

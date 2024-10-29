@@ -68,6 +68,6 @@ def create_torrent(input_path, tracker_url):
 
 # Sử dụng hàm
 tracker_url = "udp://tracker.opentrackr.org:1337/announce"
-input_path = "C:\\Users\\DELL\\Downloads\\btl_cn\\naruto.txt"  # Thay thế bằng file hoặc thư mục của bạn
+input_path = "C:\\Users\\DELL\\Downloads\\btl_cn\\my_folder3"  # Thay thế bằng file hoặc thư mục của bạn
 
 create_torrent(input_path, tracker_url)

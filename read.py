@@ -34,5 +34,5 @@ def inspect_torrent_file(torrent_file):
         print("Error reading torrent file:", e)
 
 # Kiểm tra file torrent
-torrent_file = 'C:\\Users\\DELL\\Downloads\\btl_cn\\tracker\\naruto.txt.torrent'  # Thay thế bằng đường dẫn đến file torrent của bạn
+torrent_file = 'C:\\Users\\DELL\\Downloads\\btl_cn\\my_folder3.torrent'  # Thay thế bằng đường dẫn đến file torrent của bạn
 inspect_torrent_file(torrent_file)
