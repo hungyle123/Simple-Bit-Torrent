@@ -117,50 +117,65 @@ class internet_process(threading.Thread):
         try:
             global current_thread
             while True:
-                with lock:
-                    if current_thread == 'internet':
-                        print("------------------------Internet Interface!!----------------------------")
+                a = 2
+                # with lock:
+                #     if current_thread == 'internet':
+                #         print("------------------------Internet Interface!!----------------------------")
 
-                        request = input('input for the internet: ')
+                #         request = input('input for the internet: ')
 
-                        if request == 'switch':
-                            current_thread = 'tracker'
-                        else:
-                            self.node_socket.sendall(request.encode('utf-8'))
+                #         if request == 'switch':
+                #             current_thread = 'tracker'
+                #         else:
+                #             self.node_socket.sendall(request.encode('utf-8'))
 
-                            file_have = []
-                            current_dir = os.path.dirname(os.path.abspath(__file__))
-                            current_file = os.path.basename(__file__)
+                #             file_have = []
+                #             current_dir = os.path.dirname(os.path.abspath(__file__))
+                #             current_file = os.path.basename(__file__)
 
-                            print(current_dir)
+                #             print(current_dir)
 
-                            for f in os.listdir(current_dir):
-                                full_path = os.path.join(current_dir, f)
+                #             for f in os.listdir(current_dir):
+                #                 full_path = os.path.join(current_dir, f)
 
-                                print(full_path)
+                #                 print(full_path)
 
-                                if os.path.isfile(full_path):  # If it's a file
-                                    torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
-                                    # Encode the bytes to base64 string
-                                    file_have.append(torrent_content)
+                #                 if os.path.isfile(full_path):  # If it's a file
+                #                     torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
+                #                     # Encode the bytes to base64 string
+                #                     file_have.append(torrent_content)
                                 
-                                elif os.path.isdir(full_path):  # If it's a directory
-                                    torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
-                                    # Encode the bytes to base64 string
-                                    file_have.append(torrent_content)
+                #                 elif os.path.isdir(full_path):  # If it's a directory
+                #                     torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
+                #                     # Encode the bytes to base64 string
+                #                     file_have.append(torrent_content)
 
-                            self.node_socket.sendall(len(file_have).to_bytes(8,'big'))
+                #             self.node_socket.sendall(len(file_have).to_bytes(8,'big'))
 
-                            # Send the list of files that the node has
-                            for file_path in file_have:
-                                #data = json.dumps({"torrent_content": file_path})  # Wrap it in a dict for clarity
-                                self.send_torrent(file_path)
-                                time.sleep(2)
+                #             # Send the list of files that the node has
+                #             for file_path in file_have:
+                #                 #data = json.dumps({"torrent_content": file_path})  # Wrap it in a dict for clarity
+                #                 self.send_torrent(file_path)
+                #                 time.sleep(2)
 
         except Exception as e:
             print(f"Error during communication: {e}")
         finally:
             self.node_socket.close()
+
+    def ask_for_torrent(self):
+        try:
+            request = 'send_torrent_list'
+            self.node_socket.sendall(request.encode('utf-8'))
+
+            data = self.node_socket.recv(4096)  # Nhận gói dữ liệu đầu tiên (4096 bytes là buffer size)
+            magnet_link = json.loads(data.decode('utf-8'))  # Giải mã dữ liệu nhận được và chuyển đổi từ JSON sang dictionary
+
+            print("Received torrent list:", magnet_link)
+            return magnet_link
+        
+        except Exception as e:
+            print(f"Error during communication: {e}")
 
     def send_torrent(self,torrent_content):
         
@@ -286,17 +301,53 @@ class NodeApp:
         label = tk.Label(self.internet_frame, text="Internet Interface")
         label.pack(pady=10)
 
-        # self.text_area = scrolledtext.ScrolledText(self.internet_frame, width=40, height=10)
-        # self.text_area.pack(pady=10)
+        self.text_area = scrolledtext.ScrolledText(self.internet_frame, width=40, height=10)
+        self.text_area.pack(pady=10)
 
         switch_button = tk.Button(self.internet_frame, text="Switch to Tracker", command=self.switch_to_tracker)
         switch_button.pack(pady=10)
 
         send_button = tk.Button(self.internet_frame, text="Send Files", command=self.send_files)
         send_button.pack(pady=10)
+
+        receive_button = tk.Button(self.internet_frame, text="Receive Torrent List", command=self.receive_list_torrent)
+        receive_button.pack(pady=10)
+
+        
+
     def send_files(self):
         # Call the method in the internet process to send torrent files
         self.inet_process.send()
+
+    def receive_list_torrent(self):
+
+        magnet_link = self.inet_process.ask_for_torrent()
+
+        print(magnet_link)
+
+        if isinstance(magnet_link, dict):
+            # Xóa nội dung hiện tại trong text_area
+            self.text_area.delete(1.0, tk.END)
+            
+            # Tạo một danh sách các mục từ magnet_link để chọn lựa
+            choices = list(magnet_link.items())
+            
+            # Hiển thị danh sách các tùy chọn trong text_area
+            for idx, (key, value) in enumerate(choices):
+                self.text_area.insert(tk.END, f"{idx}. {key}: {value}\n")
+            
+            # Giả sử sau đó ta có thể chọn một mục qua chỉ số, ví dụ chọn mục đầu tiên
+            selected_index = 0  # Thay đổi chỉ số này theo lựa chọn người dùng
+            selected_dict = {choices[selected_index][0]: choices[selected_index][1]}
+            
+            # Gán mục đã chọn vào biến self.selected_torrent
+            self.selected_torrent = selected_dict
+            print("Selected torrent:", self.selected_torrent)
+
+        else:
+            self.text_area.delete(1.0, tk.END)
+            self.text_area.insert(tk.END, "Error: Received data is not a valid dictionary.")
+
 
     def setup_tracker_frame(self):
         label = tk.Label(self.tracker_frame, text="Tracker Interface")

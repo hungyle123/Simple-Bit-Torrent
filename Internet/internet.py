@@ -54,14 +54,11 @@ class client_process(threading.Thread):
                 client_require = self.client_socket.recv(1024*512).decode('utf-8')
 
                 if client_require == 'send_torrent_list':
-                    magnet_link_json = json.dumps(magnet_link)
-
-                    # Gửi danh sách magnet link đã serialize cho client
-                    self.client_socket.sendall(magnet_link_json.encode('utf-8'))
-                    print(f"Sent torrent list to {self.addr}")
+                    # Gửi file cho client
+                    self.receive_send_torrrent_list()
                 
                 elif client_require == 'send':
-
+                    # Nhận file torrent được gửi từ client
                     self.receive_send()
 
                 elif client_require == 'exit':
@@ -78,51 +75,63 @@ class client_process(threading.Thread):
             self.client_socket.close()
 
     def receive_send(self):
-        # Nhận con số num_file: có bao nhiêu file torrent được tạo từ client gửi qua
-        num_files = int.from_bytes(self.client_socket.recv(8), 'big')
-        print(f"Receiving {num_files} torrent files...")
+        try:
+            # Nhận con số num_file: có bao nhiêu file torrent được tạo từ client gửi qua
+            num_files = int.from_bytes(self.client_socket.recv(8), 'big')
+            print(f"Receiving {num_files} torrent files...")
 
-        for i in range(num_files):
-            torrent_content = self.receive_torrent()
+            for i in range(num_files):
+                torrent_content = self.receive_torrent()
 
-            torrent_filename = f"received_file_{i+1}.torrent"
+                torrent_filename = f"received_file_{i+1}.torrent"
 
-            # Ghi tạm file ra để lát đọc được thông tin về cái file torrent đó tên j để lát đặt tên
+                # Ghi tạm file ra để lát đọc được thông tin về cái file torrent đó tên j để lát đặt tên
+                
+                with open(torrent_filename, 'wb') as f:
+                    f.write(torrent_content)
+                print(f"Saved {torrent_filename}")
+
+                # Ta sử dụng biến torrent_content để đọc tiếp các cái trường tên file nên cần 1 biến khác để giữ content torrent
+                torrent_content_keep = torrent_content
+                new_magnet_link = create_magnet_link(torrent_filename)
+
+                with open(torrent_filename, 'rb') as torrent_file:
+                    try:
+                        torrent_content = bencodepy.decode(torrent_file.read())
+                    except Exception as e:
+                        print(f"Error decoding torrent file: {e}")
+                        continue  # Skip this iteration if decoding fails
+
+
+                torrent_name = torrent_content[b'info'][b'name'].decode()  # Lấy trường 'name' từ torrent
+                final_torrent_filename = f"{torrent_name}.torrent"
+
+                # Tạo folder với tên là 1 cái hash id để lúc sau truy vấn
+                magnet_folder = os.path.join(os.getcwd(), magnet_to_folder(new_magnet_link))
+                os.makedirs(magnet_folder, exist_ok=True)
+                final_torrent_path = os.path.join(magnet_folder, final_torrent_filename)
+
+                with open(final_torrent_path, 'wb') as new_torrent_file:
+                    new_torrent_file.write(torrent_content_keep)  # Ghi nội dung tệp torrent mới
+                print(f"Saved new torrent file as {final_torrent_path}")
+
+                #Thêm vào dictionary magnet_link với tên tệp và giá trị Magnet link
+                magnet_link[new_magnet_link] = torrent_name
+                print(f"Added new magnet link: {new_magnet_link}:{torrent_name}")
+
+                #Sau đó xóa cái file tạm (file để lấy tên torrent)
+                os.remove(torrent_filename)
+        except Exception as e:
+            print(f"Error: {e}")
             
-            with open(torrent_filename, 'wb') as f:
-                f.write(torrent_content)
-            print(f"Saved {torrent_filename}")
+    def receive_send_torrrent_list(self):
 
-            # Ta sử dụng biến torrent_content để đọc tiếp các cái trường tên file nên cần 1 biến khác để giữ content torrent
-            torrent_content_keep = torrent_content
-            new_magnet_link = create_magnet_link(torrent_filename)
+        magnet_link_json = json.dumps(magnet_link)
 
-            with open(torrent_filename, 'rb') as torrent_file:
-                try:
-                    torrent_content = bencodepy.decode(torrent_file.read())
-                except Exception as e:
-                    print(f"Error decoding torrent file: {e}")
-                    continue  # Skip this iteration if decoding fails
+        # Gửi danh sách magnet link đã serialize cho client
+        self.client_socket.sendall(magnet_link_json.encode('utf-8'))
+        print(f"Sent torrent list to {self.addr}")
 
-
-            torrent_name = torrent_content[b'info'][b'name'].decode()  # Lấy trường 'name' từ torrent
-            final_torrent_filename = f"{torrent_name}.torrent"
-
-            # Tạo folder với tên là 1 cái hash id để lúc sau truy vấn
-            magnet_folder = os.path.join(os.getcwd(), magnet_to_folder(new_magnet_link))
-            os.makedirs(magnet_folder, exist_ok=True)
-            final_torrent_path = os.path.join(magnet_folder, final_torrent_filename)
-
-            with open(final_torrent_path, 'wb') as new_torrent_file:
-                new_torrent_file.write(torrent_content_keep)  # Ghi nội dung tệp torrent mới
-            print(f"Saved new torrent file as {final_torrent_path}")
-
-            #Thêm vào dictionary magnet_link với tên tệp và giá trị Magnet link
-            magnet_link[new_magnet_link] = torrent_name
-            print(f"Added new magnet link: {new_magnet_link}:{torrent_name}")
-
-            #Sau đó xóa cái file tạm (file để lấy tên torrent)
-            os.remove(torrent_filename)
 
 class Server:
     def __init__(self, host = 'localhost', port = 1234):
