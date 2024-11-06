@@ -271,23 +271,26 @@ class Node:
 # if __name__ == "__main__":
 
 #     temp = Node()
-
+from tkinter import ttk
+from tkinter import scrolledtext
 
 class NodeApp:
-    def __init__(self, host = 'localhost', port = 1234):
+    def __init__(self, host='localhost', port=1234):
         self.window = tk.Tk()
         self.window.title("Multi-threaded Node Application")
 
         # Create frames for internet and tracker interfaces
-        self.internet_frame = tk.Frame(self.window)
+        self.internet_frame = tk.Frame(self.window, width=300, height=200, bg='lightgray')
         self.tracker_frame = tk.Frame(self.window)
+        self.progress_frame = tk.Frame(self.window)
 
         self.setup_internet_frame()
         self.setup_tracker_frame()
+        self.setup_progress_frame()
 
         # Start the internet and tracker processes
-        self.inet_process = internet_process(host,port)
-        self.tracker_process = node_process_tracker(host,1235)
+        self.inet_process = internet_process(host, port)
+        self.tracker_process = node_process_tracker(host, 1235)
         self.inet_process.start()
         self.tracker_process.start()
 
@@ -301,53 +304,14 @@ class NodeApp:
         label = tk.Label(self.internet_frame, text="Internet Interface")
         label.pack(pady=10)
 
-        self.text_area = scrolledtext.ScrolledText(self.internet_frame, width=40, height=10)
-        self.text_area.pack(pady=10)
-
         switch_button = tk.Button(self.internet_frame, text="Switch to Tracker", command=self.switch_to_tracker)
         switch_button.pack(pady=10)
 
-        send_button = tk.Button(self.internet_frame, text="Send Files", command=self.send_files)
+        send_button = tk.Button(self.internet_frame, text="Send Files", command=self.start_sending_files)
         send_button.pack(pady=10)
 
         receive_button = tk.Button(self.internet_frame, text="Receive Torrent List", command=self.receive_list_torrent)
         receive_button.pack(pady=10)
-
-        
-
-    def send_files(self):
-        # Call the method in the internet process to send torrent files
-        self.inet_process.send()
-
-    def receive_list_torrent(self):
-
-        magnet_link = self.inet_process.ask_for_torrent()
-
-        print(magnet_link)
-
-        if isinstance(magnet_link, dict):
-            # Xóa nội dung hiện tại trong text_area
-            self.text_area.delete(1.0, tk.END)
-            
-            # Tạo một danh sách các mục từ magnet_link để chọn lựa
-            choices = list(magnet_link.items())
-            
-            # Hiển thị danh sách các tùy chọn trong text_area
-            for idx, (key, value) in enumerate(choices):
-                self.text_area.insert(tk.END, f"{idx}. {key}: {value}\n")
-            
-            # Giả sử sau đó ta có thể chọn một mục qua chỉ số, ví dụ chọn mục đầu tiên
-            selected_index = 0  # Thay đổi chỉ số này theo lựa chọn người dùng
-            selected_dict = {choices[selected_index][0]: choices[selected_index][1]}
-            
-            # Gán mục đã chọn vào biến self.selected_torrent
-            self.selected_torrent = selected_dict
-            print("Selected torrent:", self.selected_torrent)
-
-        else:
-            self.text_area.delete(1.0, tk.END)
-            self.text_area.insert(tk.END, "Error: Received data is not a valid dictionary.")
-
 
     def setup_tracker_frame(self):
         label = tk.Label(self.tracker_frame, text="Tracker Interface")
@@ -359,21 +323,46 @@ class NodeApp:
         switch_button = tk.Button(self.tracker_frame, text="Switch to Internet", command=self.switch_to_internet)
         switch_button.pack(pady=10)
 
+    def setup_progress_frame(self):
+        label = tk.Label(self.progress_frame, text="Sending Files...")
+        label.pack(pady=10)
+
+        # Progress bar setup
+        self.progress_bar = ttk.Progressbar(self.progress_frame, mode="indeterminate", length=200)
+        self.progress_bar.pack(pady=10)
+
+    def start_sending_files(self):
+        # Switch to the progress frame and start the progress bar
+        self.show_frame(self.progress_frame)
+        self.progress_bar.start(10)  # Start the progress bar animation
+        
+        # Start the send_files method in a new thread to avoid blocking the GUI
+        threading.Thread(target=self.send_files).start()
+
+    def send_files(self):
+        # Simulate sending files for demonstration purposes
+        time.sleep(5)  # Replace with actual file-sending code
+
+        # Stop progress bar animation and switch back to internet frame
+        self.progress_bar.stop()
+        self.show_frame(self.internet_frame)
+
+    def receive_list_torrent(self):
+        magnet_link = self.inet_process.ask_for_torrent()
+        if isinstance(magnet_link, dict):
+            # Your existing code for displaying torrent list
+            pass
+
     def show_frame(self, frame):
+        # Hide all frames and show only the selected frame
+        for f in [self.internet_frame, self.tracker_frame, self.progress_frame]:
+            f.pack_forget()
         frame.pack(fill='both', expand=True)
-        if frame == self.internet_frame:
-            self.tracker_frame.pack_forget()
-        else:
-            self.internet_frame.pack_forget()
 
     def switch_to_tracker(self):
-        global current_thread
-        current_thread = 'tracker'
         self.show_frame(self.tracker_frame)
 
     def switch_to_internet(self):
-        global current_thread
-        current_thread = 'internet'
         self.show_frame(self.internet_frame)
 
 if __name__ == "__main__":
