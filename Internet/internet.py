@@ -42,7 +42,7 @@ class client_process(threading.Thread):
         torrent_content = b""
 
         while len(torrent_content) < torrent_size:
-            torrent_content += self.client_socket.recv(100000000)  #64KB
+            torrent_content += self.client_socket.recv(1024*512)  #64KB
 
         return torrent_content
     
@@ -56,11 +56,11 @@ class client_process(threading.Thread):
                 if client_require == 'send_torrent_list':
                     # Gửi file cho client
                     self.receive_send_torrrent_list()
-                
                 elif client_require == 'send':
                     # Nhận file torrent được gửi từ client
                     self.receive_send()
-
+                elif client_require == 'send_torrent_file':
+                    self.send_file_torrent()
                 elif client_require == 'exit':
                     print(f"Client {self.addr} has disconnected.")
                     break
@@ -73,6 +73,42 @@ class client_process(threading.Thread):
             print(f"Error: {e}")
         finally:
             self.client_socket.close()
+
+    def send_file_torrent(self):
+        magnet_file_receive = self.client_socket.recv(1024*512).decode('utf-8')
+        
+        magnet_folder = os.path.join(os.getcwd(),magnet_to_folder(magnet_file_receive))
+
+        print(f'hi: {magnet_folder}')
+
+        files_in_folder = os.listdir(magnet_folder)
+        if not files_in_folder:
+            print("Không có file nào trong thư mục.")
+            return
+
+        torrent_file_path = os.path.join(magnet_folder, files_in_folder[0])
+
+        print(f'hi: {torrent_file_path}')
+        # Lấy kích thước của file
+        size_file = os.path.getsize(torrent_file_path)
+
+        print(f'hi: {size_file}')
+
+        # Gửi kích thước file qua socket
+        self.client_socket.sendall(size_file.to_bytes(8, 'big'))
+
+        # Mở file và gửi dữ liệu theo từng phần
+        with open(torrent_file_path, 'rb') as f:
+            while True:
+                # Đọc dữ liệu theo từng chunk (mỗi lần 4096 bytes)
+                chunk = f.read(4096)
+                if not chunk:
+                    break  # Thoát khi đã đọc hết file
+                print(f'hi: {chunk}')
+                self.client_socket.sendall(chunk)  # Gửi chunk qua socket
+        
+        print("Đã gửi file torrent thành công.")
+
 
     def receive_send(self):
         try:

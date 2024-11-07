@@ -220,6 +220,33 @@ class internet_process(threading.Thread):
         except Exception as e:
             print(f"Error sending torrent file: {e}")
 
+    def receive_file_torrent(self,magnet_link, name_file):
+        message = f'send_torrent_file'
+
+        self.node_socket.sendall(message.encode('utf-8'))
+
+        self.node_socket.sendall(magnet_link.encode('utf-8'))
+
+        size_file = int.from_bytes(self.node_socket.recv(8),'big')
+
+        torrent_content = b""
+
+        while len(torrent_content) < size_file:
+            print(f'hi: {torrent_content}')
+            torrent_content += self.node_socket.recv(1024*512)
+
+        name_file += '.torrent'
+
+        file_path = os.path.join(os.getcwd(), name_file)
+
+        # Lưu nội dung vào file
+        with open(file_path, 'wb') as f:
+            f.write(torrent_content)
+
+        print(f"Đã lưu file torrent tại {file_path}.")
+
+        
+
 
 class node_process_tracker(threading.Thread):
     def __init__(self,host = 'localhost', port = 1235):
@@ -281,12 +308,14 @@ class NodeApp:
 
         # Create frames for internet and tracker interfaces
         self.internet_frame = tk.Frame(self.window, width=300, height=200, bg='lightgray')
-        self.tracker_frame = tk.Frame(self.window)
-        self.progress_frame = tk.Frame(self.window)
+        self.tracker_frame = tk.Frame(self.window, width=300, height=200, bg='lightgray')
+        self.progress_frame = tk.Frame(self.window, width=300, height=200, bg='lightgray')
+        self.selection_frame = tk.Frame(self.window, width=300, height=200, bg='lightgray')
 
         self.setup_internet_frame()
         self.setup_tracker_frame()
         self.setup_progress_frame()
+        self.setup_selection_frame()
 
         # Start the internet and tracker processes
         self.inet_process = internet_process(host, port)
@@ -327,36 +356,147 @@ class NodeApp:
         label = tk.Label(self.progress_frame, text="Sending Files...")
         label.pack(pady=10)
 
+    
         # Progress bar setup
         self.progress_bar = ttk.Progressbar(self.progress_frame, mode="indeterminate", length=200)
         self.progress_bar.pack(pady=10)
+    
+    def setup_selection_frame(self):
+        label = tk.Label(self.selection_frame, text="Select Torrent", font=("Arial", 14))
+        label.grid(row=0, column=0, columnspan=3, pady=10)
+
+        # Vertical and Horizontal scrollbars for the Listbox
+        self.listbox = tk.Listbox(self.selection_frame, width=20, height=10)
+        self.listbox.grid(row=1, column=0, padx=(20, 5), pady=10, sticky="ns")
+
+        y_scroll = tk.Scrollbar(self.selection_frame, orient=tk.VERTICAL, command=self.listbox.yview)
+        y_scroll.grid(row=1, column=1, sticky="ns")
+        self.listbox.config(yscrollcommand=y_scroll.set)
+
+        x_scroll = tk.Scrollbar(self.selection_frame, orient=tk.HORIZONTAL, command=self.listbox.xview)
+        x_scroll.grid(row=2, column=0, sticky="ew")
+        self.listbox.config(xscrollcommand=x_scroll.set)
+
+        # Text widget on the right for displaying values
+        self.text_display = scrolledtext.ScrolledText(self.selection_frame, wrap=tk.WORD, width=40, height=10)
+        self.text_display.grid(row=1, column=2, padx=(5, 20), pady=10, rowspan=2)
+
+        # Define text tags for colors
+        self.text_display.tag_configure("key", foreground="black")
+        self.text_display.tag_configure("value", foreground="blue")
+
+        # Bind selection event to update value display
+        self.listbox.bind("<<ListboxSelect>>", self.on_key_select)
+
+        # Add "Select" button to confirm selection
+        self.select_button = tk.Button(self.selection_frame, text="Select", command=self.select_item)
+        self.select_button.grid(row=3, column=0, columnspan=3, pady=10)
+
+        # Add "Back" button to go back to the internet interface
+        back_button = tk.Button(self.selection_frame, text="Back to internet_process", command=lambda: self.show_frame(self.internet_frame))
+        back_button.grid(row=4, column=0, columnspan=3, pady=5)
 
     def start_sending_files(self):
         # Switch to the progress frame and start the progress bar
         self.show_frame(self.progress_frame)
         self.progress_bar.start(10)  # Start the progress bar animation
         
+        self.window.update_idletasks()
+
         # Start the send_files method in a new thread to avoid blocking the GUI
         threading.Thread(target=self.send_files).start()
 
     def send_files(self):
         # Simulate sending files for demonstration purposes
-        time.sleep(5)  # Replace with actual file-sending code
+        self.inet_process.send() # Replace with actual file-sending code
 
         # Stop progress bar animation and switch back to internet frame
         self.progress_bar.stop()
         self.show_frame(self.internet_frame)
 
     def receive_list_torrent(self):
-        magnet_link = self.inet_process.ask_for_torrent()
+        magnet_link = self.inet_process.ask_for_torrent()  # Assume this returns a dictionary
+
         if isinstance(magnet_link, dict):
-            # Your existing code for displaying torrent list
-            pass
+            self.data = magnet_link
+            self.update_listbox()
+
+            # Show the select frame after data is received
+            self.show_frame(self.selection_frame)
+
+    def update_listbox(self):
+        # Clear any existing items in the listbox
+        self.listbox.delete(0, tk.END)
+        
+        # Populate listbox with new keys
+        for key in self.data.keys():
+            self.listbox.insert(tk.END, key)
+
+    def on_key_select(self, event):
+        # Get selected key from listbox
+        selected_index = self.listbox.curselection()
+        if selected_index:
+            key = self.listbox.get(selected_index)
+            value = self.data.get(key, "")
+
+            # Update the text display with the selected key's value
+            self.text_display.config(state=tk.NORMAL)
+            self.text_display.delete(1.0, tk.END)
+            self.text_display.insert(tk.END, f"{key}: ", "key")
+            self.text_display.insert(tk.END, f"{value}", "value")
+            self.text_display.config(state=tk.DISABLED)
+
+    def select_item(self):
+        # Get selected key from listbox
+        selected_index = self.listbox.curselection()
+        if selected_index:
+            key = self.listbox.get(selected_index)
+            value = self.data.get(key)
+
+            # Save the selected item to the instance variable
+            self.selected_item = (key, value)
+
+            # Optional: Show a confirmation message
+            print(f"Selected: {key}: {value}")
+
+            # You can now use self.selected_item for further actions
+            # For example, if you want to use it in another function, you can access it like this:
+            # key, value = self.selected_item
+            # Perform any action with this key-value pair
+        
+            self.inet_process.receive_file_torrent(key,value)
+
+            print('Đã lưu trên local ...')
+        
+
+        self.show_frame(self.internet_frame)
+
+    ### hàm này đang ko xài
+    def handle_selection(self):
+        # Lấy mục đã chọn từ Listbox
+        selected_index = self.listbox.curselection()
+
+        if selected_index:
+            # Lấy giá trị của item đã chọn
+            selected_item = self.listbox.get(selected_index[0])
+            print("Selected torrent:", selected_item)
+
+            # Lưu giá trị chọn vào biến cho các bước sau
+            self.selected_torrent = selected_item
+
+            # Sau khi xử lý, quay lại giao diện internet
+            self.show_frame(self.internet_frame)
+
+            # Nếu bạn muốn sử dụng giá trị này để gửi file, ví dụ:
+            # self.send_selected_file(self.selected_torrent)
+        else:
+            print("No selection made.")
 
     def show_frame(self, frame):
         # Hide all frames and show only the selected frame
-        for f in [self.internet_frame, self.tracker_frame, self.progress_frame]:
-            f.pack_forget()
+        for f in [self.internet_frame, self.tracker_frame, self.progress_frame, self.selection_frame]:
+            if(f != frame):
+                f.pack_forget()
         frame.pack(fill='both', expand=True)
 
     def switch_to_tracker(self):
