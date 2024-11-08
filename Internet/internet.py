@@ -31,10 +31,12 @@ def magnet_to_folder(magnet_link):
     return folder_name
 
 class client_process(threading.Thread):
-    def __init__(self, client_socket, addr):
+    def __init__(self, client_socket, addr, tracker_socket, tracker_addr):
         threading.Thread.__init__(self)
         self.client_socket = client_socket
         self.addr = addr
+        self.tracker_socket = tracker_socket
+        self.tracker_addr = tracker_addr
 
     def receive_torrent(self):
         torrent_size = int.from_bytes(self.client_socket.recv(8),'big')
@@ -79,7 +81,7 @@ class client_process(threading.Thread):
         
         magnet_folder = os.path.join(os.getcwd(),magnet_to_folder(magnet_file_receive))
 
-        print(f'hi: {magnet_folder}')
+        #print(f'hi: {magnet_folder}')
 
         files_in_folder = os.listdir(magnet_folder)
         if not files_in_folder:
@@ -88,11 +90,11 @@ class client_process(threading.Thread):
 
         torrent_file_path = os.path.join(magnet_folder, files_in_folder[0])
 
-        print(f'hi: {torrent_file_path}')
+        #print(f'hi: {torrent_file_path}')
         # Lấy kích thước của file
         size_file = os.path.getsize(torrent_file_path)
 
-        print(f'hi: {size_file}')
+        #print(f'hi: {size_file}')
 
         # Gửi kích thước file qua socket
         self.client_socket.sendall(size_file.to_bytes(8, 'big'))
@@ -118,6 +120,10 @@ class client_process(threading.Thread):
 
             for i in range(num_files):
                 torrent_content = self.receive_torrent()
+
+                ###
+                self.protocol_send_tracker_information(torrent_content)
+                ###
 
                 torrent_filename = f"received_file_{i+1}.torrent"
 
@@ -167,6 +173,20 @@ class client_process(threading.Thread):
         # Gửi danh sách magnet link đã serialize cho client
         self.client_socket.sendall(magnet_link_json.encode('utf-8'))
         print(f"Sent torrent list to {self.addr}")
+
+    def protocol_send_tracker_information(self, torrent_content):
+        message = f'information_file'
+
+        self.tracker_socket.sendall(message.decode('utf-8'))
+
+        self.tracker_socket.sendall(len(torrent_content).to_bytes(8,'big'))
+
+        self.tracker_socket.sendall(torrent_content)
+
+        self.tracker_socket.sendall(self.addr.decode('utf-8'))
+        print('Đã chuyển tiếp qua cho tracker')
+
+
 
 
 class Server:

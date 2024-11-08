@@ -27,12 +27,14 @@ def inspect_torrent_file(torrent_file):
             # Đọc và giải mã nội dung file torrent
             torrent_data = bencodepy.decode(f.read())
             
+            pieces = torrent_data[b'info'][b'files'][0]
             # In ra nội dung của file torrent với định dạng dễ nhìn
-            pprint.pprint(torrent_data)
+            #pprint.pprint(torrent_data)
+            print(type(pieces))
     
     except Exception as e:
         print("Error reading torrent file:", e)
 
 # Kiểm tra file torrent
-torrent_file = 'C:\\Users\\DELL\\Downloads\\btl_cn\\my_folder3.torrent'  # Thay thế bằng đường dẫn đến file torrent của bạn
+torrent_file = 'C:\\Users\\DELL\\Downloads\\btl_cn\\my_folder_2.torrent'  # Thay thế bằng đường dẫn đến file torrent của bạn
 inspect_torrent_file(torrent_file)

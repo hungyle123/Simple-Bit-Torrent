@@ -196,19 +196,20 @@ class internet_process(threading.Thread):
             print(current_dir)
 
             for f in os.listdir(current_dir):
-                full_path = os.path.join(current_dir, f)
+                if(f != current_file):
+                    full_path = os.path.join(current_dir, f)
 
-                print(full_path)
+                    print(full_path)
 
-                if os.path.isfile(full_path):  # If it's a file
-                    torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
-                    # Encode the bytes to base64 string
-                    file_have.append(torrent_content)
-                
-                elif os.path.isdir(full_path):  # If it's a directory
-                    torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
-                    # Encode the bytes to base64 string
-                    file_have.append(torrent_content)
+                    if os.path.isfile(full_path):  # If it's a file
+                        torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
+                        # Encode the bytes to base64 string
+                        file_have.append(torrent_content)
+                    
+                    elif os.path.isdir(full_path):  # If it's a directory
+                        torrent_content = create_torrent(full_path, tracker_url="http://example.com/announce")
+                        # Encode the bytes to base64 string
+                        file_have.append(torrent_content)
 
             self.node_socket.sendall(len(file_have).to_bytes(8,'big'))
 
