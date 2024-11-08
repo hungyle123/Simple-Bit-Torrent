@@ -9,6 +9,39 @@ magnet_link = {}
 import hashlib
 import bencodepy
 
+def receive_simple_message(a_socket, decode_or_not):
+    while True:
+        raw_size = a_socket.recv(8)
+        if not raw_size:
+            continue
+
+        break
+
+    size = int.from_bytes(raw_size, 'big')
+
+    # Đảm bảo đọc đủ số byte của thông điệp
+    message = b''
+    while len(message) < size:
+        packet = a_socket.recv(size - len(message))
+        if not packet:
+            return None  # Kết nối đóng trong khi đang nhận dữ liệu
+        message += packet
+
+    if decode_or_not == True:
+        return message.decode('utf-8')
+    else:
+        return message
+
+
+def send_simple_message(a_socket,message, encode_or_not):
+    a_socket.sendall(len(message).to_bytes(8,'big'))
+
+    if encode_or_not == True:
+        a_socket.sendall(message.encode('utf-8'))
+    else:
+        a_socket.sendall(message)
+
+
 def create_magnet_link(torrent_filename):
     """Tạo magnet link từ file torrent."""
     with open(torrent_filename, 'rb') as f:

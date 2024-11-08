@@ -10,7 +10,42 @@ from tkinter import scrolledtext
 current_thread = 'internet'
 lock = threading.Lock()
 
-class uploading(threading.Thread):
+def receive_simple_message(a_socket, decode_or_not):
+    while True:
+        raw_size = a_socket.recv(8)
+        if not raw_size:
+            continue
+
+        break
+
+    size = int.from_bytes(raw_size, 'big')
+
+    # Đảm bảo đọc đủ số byte của thông điệp
+    message = b''
+    while len(message) < size:
+        packet = a_socket.recv(size - len(message))
+        if not packet:
+            return None  # Kết nối đóng trong khi đang nhận dữ liệu
+        message += packet
+
+    if decode_or_not == True:
+        return message.decode('utf-8')
+    else:
+        return message
+
+
+def send_simple_message(a_socket,message, encode_or_not):
+    a_socket.sendall(len(message).to_bytes(8,'big'))
+
+    if encode_or_not == True:
+        a_socket.sendall(message.encode('utf-8'))
+    else:
+        a_socket.sendall(message)
+
+
+
+####################################################
+class uploading(threading.Thread):  # chưa sửa
     def __init__(self, node_host = 'localhost', node_port = 1):
         threading.Thread.__init__(self)
         self.upload = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -38,6 +73,8 @@ class uploading(threading.Thread):
             self.upload_socket.sendall(reply.encode('utf-8'))
 
         self.upload_socket.close()
+
+####################################################
 
 import hashlib
 import bencodepy
