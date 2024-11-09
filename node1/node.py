@@ -42,6 +42,22 @@ def send_simple_message(a_socket,message, encode_or_not):
     else:
         a_socket.sendall(message)
 
+def receive_simple_number(a_socket):
+    while True:
+        raw_size = a_socket.recv(8)
+        if not raw_size:
+            continue
+
+        break
+
+    size = int.from_bytes(raw_size, 'big')
+
+    return size
+
+def send_simple_number(a_socket,number):
+    a_socket.sendall(number.to_bytes(8,'big'))
+
+
 
 
 ####################################################
@@ -203,9 +219,12 @@ class internet_process(threading.Thread):
     def ask_for_torrent(self):
         try:
             request = 'send_torrent_list'
-            self.node_socket.sendall(request.encode('utf-8'))
+            #self.node_socket.sendall(request.encode('utf-8'))
+            send_simple_message(self.node_socket,request,True)
 
-            data = self.node_socket.recv(4096)  # Nhận gói dữ liệu đầu tiên (4096 bytes là buffer size)
+            #data = self.node_socket.recv(4096)  # Nhận gói dữ liệu đầu tiên (4096 bytes là buffer size)
+            data = receive_simple_message(self.node_socket,False)
+
             magnet_link = json.loads(data.decode('utf-8'))  # Giải mã dữ liệu nhận được và chuyển đổi từ JSON sang dictionary
 
             print("Received torrent list:", magnet_link)
@@ -216,15 +235,17 @@ class internet_process(threading.Thread):
 
     def send_torrent(self,torrent_content):
         
-        self.node_socket.sendall(len(torrent_content).to_bytes(8,'big'))
+        # self.node_socket.sendall(len(torrent_content).to_bytes(8,'big'))
+        # self.node_socket.sendall(torrent_content)
+        send_simple_message(self.node_socket,torrent_content,False)
 
-        self.node_socket.sendall(torrent_content)
         print('Torrent file sent.')
 
     def send(self):
         try:
             request = 'send'
-            self.node_socket.sendall(request.encode('utf-8'))
+            #self.node_socket.sendall(request.encode('utf-8'))
+            send_simple_message(self.node_socket,request,True)
 
             file_have = []
             current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -248,7 +269,8 @@ class internet_process(threading.Thread):
                         # Encode the bytes to base64 string
                         file_have.append(torrent_content)
 
-            self.node_socket.sendall(len(file_have).to_bytes(8,'big'))
+            #self.node_socket.sendall(len(file_have).to_bytes(8,'big'))
+            send_simple_number(self.node_socket,len(file_have))
 
             # Send the list of files that the node has
             for file_path in file_have:
@@ -261,17 +283,19 @@ class internet_process(threading.Thread):
     def receive_file_torrent(self,magnet_link, name_file):
         message = f'send_torrent_file'
 
-        self.node_socket.sendall(message.encode('utf-8'))
+        #self.node_socket.sendall(message.encode('utf-8'))
+        send_simple_message(self.node_socket,message,True)
 
-        self.node_socket.sendall(magnet_link.encode('utf-8'))
+        #self.node_socket.sendall(magnet_link.encode('utf-8'))
+        send_simple_message(self.node_socket,magnet_link,True)
 
-        size_file = int.from_bytes(self.node_socket.recv(8),'big')
+        # size_file = int.from_bytes(self.node_socket.recv(8),'big')
 
-        torrent_content = b""
+        # torrent_content = b""
 
-        while len(torrent_content) < size_file:
-            print(f'hi: {torrent_content}')
-            torrent_content += self.node_socket.recv(1024*512)
+        # while len(torrent_content) < size_file:
+        #     torrent_content += self.node_socket.recv(1024*512)
+        torrent_content = receive_simple_message(self.node_socket,False)
 
         name_file += '.torrent'
 

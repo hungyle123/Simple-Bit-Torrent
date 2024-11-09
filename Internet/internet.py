@@ -41,11 +41,28 @@ def send_simple_message(a_socket,message, encode_or_not):
     else:
         a_socket.sendall(message)
 
+def receive_simple_number(a_socket):
+    while True:
+        raw_size = a_socket.recv(8)
+        if not raw_size:
+            continue
 
-def create_magnet_link(torrent_filename):
+        break
+
+    size = int.from_bytes(raw_size, 'big')
+
+    return size
+
+def send_simple_number(a_socket,number):
+    a_socket.sendall(number.to_bytes(8,'big'))
+
+
+def create_magnet_link(torrent_content):
     """Tạo magnet link từ file torrent."""
-    with open(torrent_filename, 'rb') as f:
-        torrent_data = bencodepy.decode(f.read())
+    # with open(torrent_filename, 'rb') as f:
+    #     torrent_data = bencodepy.decode(f.read())
+
+    torrent_data = bencodepy.decode(torrent_content)
     
     # Tính toán hash SHA1 của phần info
     info_hash = hashlib.sha1(bencodepy.encode(torrent_data[b'info'])).hexdigest()
@@ -71,13 +88,19 @@ class client_process(threading.Thread):
         self.tracker_socket = tracker_socket
         self.tracker_addr = tracker_addr
 
+    # def __init__(self, client_socket, addr):
+    #     threading.Thread.__init__(self)
+    #     self.client_socket = client_socket
+    #     self.addr = addr
+
     def receive_torrent(self):
-        torrent_size = int.from_bytes(self.client_socket.recv(8),'big')
+        # torrent_size = int.from_bytes(self.client_socket.recv(8),'big')
 
-        torrent_content = b""
+        # torrent_content = b""
 
-        while len(torrent_content) < torrent_size:
-            torrent_content += self.client_socket.recv(1024*512)  #64KB
+        # while len(torrent_content) < torrent_size:
+        #     torrent_content += self.client_socket.recv(1024*512)  #64KB
+        torrent_content = receive_simple_message(self.client_socket,False)
 
         return torrent_content
     
@@ -86,7 +109,8 @@ class client_process(threading.Thread):
 
         try:
             while True:
-                client_require = self.client_socket.recv(1024*512).decode('utf-8')
+                #client_require = self.client_socket.recv(1024*512).decode('utf-8')
+                client_require = receive_simple_message(self.client_socket,True)
 
                 if client_require == 'send_torrent_list':
                     # Gửi file cho client
@@ -102,7 +126,8 @@ class client_process(threading.Thread):
                 else:
                     reply = f'Sorry your we do not understand your request'
                     
-                    self.client_socket.sendall(reply.encode('utf-8'))
+                    #self.client_socket.sendall(reply.encode('utf-8'))
+                    send_simple_message(self.client_socket,reply,True)
 
         except Exception as e:
             print(f"Error: {e}")
@@ -110,7 +135,8 @@ class client_process(threading.Thread):
             self.client_socket.close()
 
     def send_file_torrent(self):
-        magnet_file_receive = self.client_socket.recv(1024*512).decode('utf-8')
+        #magnet_file_receive = self.client_socket.recv(1024*512).decode('utf-8')
+        magnet_file_receive = receive_simple_message(self.client_socket,True)
         
         magnet_folder = os.path.join(os.getcwd(),magnet_to_folder(magnet_file_receive))
 
@@ -130,17 +156,16 @@ class client_process(threading.Thread):
         #print(f'hi: {size_file}')
 
         # Gửi kích thước file qua socket
-        self.client_socket.sendall(size_file.to_bytes(8, 'big'))
+        #self.client_socket.sendall(size_file.to_bytes(8, 'big'))
+        #send_simple_number(self.client_socket,size_file)
+
 
         # Mở file và gửi dữ liệu theo từng phần
         with open(torrent_file_path, 'rb') as f:
             while True:
-                # Đọc dữ liệu theo từng chunk (mỗi lần 4096 bytes)
-                chunk = f.read(4096)
-                if not chunk:
-                    break  # Thoát khi đã đọc hết file
-                print(f'hi: {chunk}')
-                self.client_socket.sendall(chunk)  # Gửi chunk qua socket
+                chunk = f.read()
+                #self.client_socket.sendall(chunk)  # Gửi chunk qua socket
+                send_simple_message(self.client_socket,chunk,False)
         
         print("Đã gửi file torrent thành công.")
 
@@ -148,7 +173,9 @@ class client_process(threading.Thread):
     def receive_send(self):
         try:
             # Nhận con số num_file: có bao nhiêu file torrent được tạo từ client gửi qua
-            num_files = int.from_bytes(self.client_socket.recv(8), 'big')
+            #num_files = int.from_bytes(self.client_socket.recv(8), 'big')
+            num_files = receive_simple_number(self.client_socket)
+
             print(f"Receiving {num_files} torrent files...")
 
             for i in range(num_files):
@@ -162,20 +189,21 @@ class client_process(threading.Thread):
 
                 # Ghi tạm file ra để lát đọc được thông tin về cái file torrent đó tên j để lát đặt tên
                 
-                with open(torrent_filename, 'wb') as f:
-                    f.write(torrent_content)
-                print(f"Saved {torrent_filename}")
+                # with open(torrent_filename, 'wb') as f:
+                #     f.write(torrent_content)
+                print(f"Reading the torrent number {i}")
 
                 # Ta sử dụng biến torrent_content để đọc tiếp các cái trường tên file nên cần 1 biến khác để giữ content torrent
                 torrent_content_keep = torrent_content
-                new_magnet_link = create_magnet_link(torrent_filename)
+                new_magnet_link = create_magnet_link(torrent_content)
 
-                with open(torrent_filename, 'rb') as torrent_file:
-                    try:
-                        torrent_content = bencodepy.decode(torrent_file.read())
-                    except Exception as e:
-                        print(f"Error decoding torrent file: {e}")
-                        continue  # Skip this iteration if decoding fails
+                # with open(torrent_filename, 'rb') as torrent_file:
+                #     try:
+                #         torrent_content = bencodepy.decode(torrent_file.read())
+                #     except Exception as e:
+                #         print(f"Error decoding torrent file: {e}")
+                #         continue  # Skip this iteration if decoding fails
+                torrent_content = bencodepy.decode(torrent_content)
 
 
                 torrent_name = torrent_content[b'info'][b'name'].decode()  # Lấy trường 'name' từ torrent
@@ -195,7 +223,7 @@ class client_process(threading.Thread):
                 print(f"Added new magnet link: {new_magnet_link}:{torrent_name}")
 
                 #Sau đó xóa cái file tạm (file để lấy tên torrent)
-                os.remove(torrent_filename)
+                #os.remove(torrent_filename)
         except Exception as e:
             print(f"Error: {e}")
             
@@ -204,19 +232,25 @@ class client_process(threading.Thread):
         magnet_link_json = json.dumps(magnet_link)
 
         # Gửi danh sách magnet link đã serialize cho client
-        self.client_socket.sendall(magnet_link_json.encode('utf-8'))
+        #self.client_socket.sendall(magnet_link_json.encode('utf-8'))
+        send_simple_message(self.client_socket,magnet_link_json,True)
         print(f"Sent torrent list to {self.addr}")
 
     def protocol_send_tracker_information(self, torrent_content):
         message = f'information_file'
 
-        self.tracker_socket.sendall(message.decode('utf-8'))
+        #self.tracker_socket.sendall(message.decode('utf-8'))
+        send_simple_message(self.tracker_socket,message,True)
 
-        self.tracker_socket.sendall(len(torrent_content).to_bytes(8,'big'))
+        #self.tracker_socket.sendall(len(torrent_content).to_bytes(8,'big'))
+        #self.tracker_socket.sendall(torrent_content)
 
-        self.tracker_socket.sendall(torrent_content)
+        send_simple_message(self.tracker_socket,torrent_content,False)
 
-        self.tracker_socket.sendall(self.addr.decode('utf-8'))
+        #self.tracker_socket.sendall(self.addr.decode('utf-8'))
+        json_addr = json.dumps(self.addr)
+        send_simple_message(self.tracker_socket,json_addr,True)
+
         print('Đã chuyển tiếp qua cho tracker')
 
 
@@ -232,10 +266,13 @@ class Server:
         print("Welcome to the Computer Network!")
         print()
 
+        tracker_socket,tracker_addr = self.server_socket.accept()
+
         while True:
             node_socket, addr = self.server_socket.accept()
             
-            one_client_socket = client_process(node_socket,addr)    
+            #one_client_socket = client_process(node_socket,addr)
+            one_client_socket = client_process(node_socket,addr,tracker_socket,tracker_addr)    
             one_client_socket.start()
 
 if __name__ == "__main__":

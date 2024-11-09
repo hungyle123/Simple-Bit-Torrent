@@ -6,6 +6,7 @@ from typing import Dict, List, Set
 import hashlib
 import bencodepy
 import os
+import pprint
 
 node_socket_list = []
 file_name: Dict[bytes, Dict[int, Set]] = {}
@@ -42,6 +43,21 @@ def send_simple_message(a_socket,message, encode_or_not):
     else:
         a_socket.sendall(message)
 
+def receive_simple_number(a_socket):
+    while True:
+        raw_size = a_socket.recv(8)
+        if not raw_size:
+            continue
+
+        break
+
+    size = int.from_bytes(raw_size, 'big')
+
+    return size
+
+def send_simple_number(a_socket,number):
+    a_socket.sendall(number.to_bytes(8,'big'))
+
 
 class node_process(threading.Thread):
     def __init__(self, node_socket, addr):
@@ -55,18 +71,21 @@ class node_process(threading.Thread):
 
         try:
             while True:
-                node_require = self.node_socket.recv(1024*512).decode('utf-8')
+                #node_require = self.node_socket.recv(1024*512).decode('utf-8')
+                node_require = receive_simple_message(self.node_socket,True)
                 
                 if node_require not in file_name:
                     reply = f'Your wanted file is not in the Bittorrent right now!'
 
-                    self.node_socket.sendall(reply.encode('utf-8'))
+                    #self.node_socket.sendall(reply.encode('utf-8'))
+                    send_simple_message(self.node_socket,reply,True)
                 else:
 
                     host,port = next(iter(file_name[node_require]))
                     reply = f'{host}:{port}'
 
-                    self.node_socket.sendall(reply.encode('utf-8'))
+                    #self.node_socket.sendall(reply.encode('utf-8'))
+                    send_simple_message()
 
         except Exception as e:
             print(f"Error: {e}")
@@ -78,22 +97,24 @@ class node_process(threading.Thread):
         for i in node_socket_list:
             if i != sender_socket:
                 try:
-                    i.sendall(message.encode('utf-8'))
+                    #i.sendall(message.encode('utf-8'))
+                    send_simple_message(i,message,True)
                 except:
                     node_socket_list.remove(i)
                     i.close()
 
 class handle_internet_process(threading.Thread):
-    def __init__(self, tracker_socket, host, port):
+    def __init__(self, interneting_socket, host, port):
         threading.Thread.__init__(self)
-        self.handle_internet_socket = tracker_socket
+        self.handle_internet_socket = interneting_socket
         self.handle_internet_socket.connect((host,port))
         print('Đã kết nối với internet server !!!')
     
     def run(self):      #Override
         try:
             while True:
-                internet_message = self.handle_internet_socket.recv(1024*512).decode('utf-8')
+                #internet_message = self.handle_internet_socket.recv(1024*512).decode('utf-8')
+                internet_message = receive_simple_message(self.handle_internet_socket,True)
                 
                 if internet_message == 'information_file':
                     self.store_information()
@@ -105,25 +126,27 @@ class handle_internet_process(threading.Thread):
             print(f'Close connection from internet')
 
     def store_information(self):
-        torrent_size = int.from_bytes(self.handle_internet_socket.recv(8),'big')
+        # torrent_size = int.from_bytes(self.handle_internet_socket.recv(8),'big')
 
-        torrent_content = b""
-        while len(torrent_content) < torrent_size:
-            torrent_content += self.handle_internet_socket.recv(1024*512)
+        # torrent_content = b""
+        # while len(torrent_content) < torrent_size:
+        #     torrent_content += self.handle_internet_socket.recv(1024*512)
 
-        ip_port_addr = self.handle_internet_socket.recv(1024*512).encode('utf-8')
+        torrent_content = receive_simple_message(self.handle_internet_socket,False)
+
+        #ip_port_addr = self.handle_internet_socket.recv(1024*512).encode('utf-8')
+        ip_port_addr_json = receive_simple_message(self.handle_internet_socket,True)
+
+        ip_port_addr = tuple(json.loads(ip_port_addr_json))
 
         torrent_name_temp = f'temp_file.torrent'
 
-        with open(torrent_name_temp,'wb') as f:
-            f.write(torrent_content)
+        # with open(torrent_name_temp,'wb') as f:
+        #     f.write(torrent_content)
 
-        print(f"Save temporary {torrent_name_temp}")
+        print(f"Reading the torrent_content")
 
-        var_torrent = None
-
-        with open(torrent_name_temp, 'rb') as f:
-            var_torrent = bencodepy.decode(f)
+        var_torrent = bencodepy.decode(torrent_content)
 
         pieces = var_torrent[b'info'][b'pieces']
 
@@ -136,18 +159,23 @@ class handle_internet_process(threading.Thread):
             
             part_size = 512 * 1024
             num_part = (file_size + part_size - 1) // part_size
+            hash_key = bytes(pieces_hash[i]) if isinstance(pieces_hash[i], list) else pieces_hash[i]
 
-            if pieces[i] not in file_name:
-                file_name[pieces[i]] = {}
+            if hash_key not in file_name:
+                file_name[hash_key] = {}
 
             for index in range(num_part):
-                if index not in file_name[pieces[i]]:
-                    file_name[pieces[i]][index] = set()
+                if index not in file_name[hash_key]:
+                    file_name[hash_key][index] = set()
 
-                if ip_port_addr not in file_name[pieces[i]][index]:
-                    file_name[pieces[i]][index].add(ip_port_addr)
+                if ip_port_addr not in file_name[hash_key][index]:
+                    file_name[hash_key][index].add(ip_port_addr)
 
-        os.remove(torrent_name_temp)
+
+        #pprint.pprint(file_name)
+        print(f'Đã nhận thông tin cập nhật từ {ip_port_addr}')
+
+        #os.remove(torrent_name_temp)
 
                 
 class Tracker:
@@ -158,6 +186,12 @@ class Tracker:
         # AF_INET là IPV4 AFINET6 là IPV6, SOCK_STREAM <=> TCP; SOCK_DGRAM <=> UDP
         self.tracker_socket.bind((self.host,self.port))
         self.tracker_socket.listen(20)
+
+        #######
+        self.interneting_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        to_internet_socket = handle_internet_process(self.interneting_socket,'localhost',1234)
+        to_internet_socket.start()
+        ######  
 
         print("Server is running now!")
 
