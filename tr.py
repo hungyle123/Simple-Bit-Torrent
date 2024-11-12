@@ -24,7 +24,7 @@ def create_torrent(input_path, tracker_url):
 
         files_info.append({
             'length': file_length,
-            'path': [os.path.basename(input_path)]  # Lưu tên file
+            'path': os.path.basename(input_path)  # Lưu tên file
         })
         pieces += file_hash  # Hash của file
 
@@ -39,7 +39,7 @@ def create_torrent(input_path, tracker_url):
                 # Thêm thông tin tệp vào danh sách
                 files_info.append({
                     'length': file_length,
-                    'path': [os.path.relpath(file_path, input_path)]  # Lưu đường dẫn tương đối
+                    'path': os.path.relpath(file_path, input_path)  # Lưu đường dẫn tương đối
                 })
 
                 # Thêm mã hash của tệp vào danh sách mã hash
@@ -68,6 +68,6 @@ def create_torrent(input_path, tracker_url):
 
 # Sử dụng hàm
 tracker_url = "udp://tracker.opentrackr.org:1337/announce"
-input_path = "C:\\Users\\DELL\\Downloads\\btl_cn\\my_folder_2"  # Thay thế bằng file hoặc thư mục của bạn
+input_path = "C:\\Users\\DELL\\Downloads\\btl_cn\\xs.txt"  # Thay thế bằng file hoặc thư mục của bạn
 
 create_torrent(input_path, tracker_url)

@@ -2,14 +2,15 @@ import threading
 import json
 import socket
 from collections import defaultdict
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple, Any
 import hashlib
 import bencodepy
 import os
 import pprint
+import pickle
 
 node_socket_list = []
-file_name: Dict[bytes, Dict[int, Set]] = {}
+file_name: Dict[Tuple[bytes,int], Set] = {}
 
 def receive_simple_message(a_socket, decode_or_not):
     while True:
@@ -74,24 +75,77 @@ class node_process(threading.Thread):
                 #node_require = self.node_socket.recv(1024*512).decode('utf-8')
                 node_require = receive_simple_message(self.node_socket,True)
                 
-                if node_require not in file_name:
-                    reply = f'Your wanted file is not in the Bittorrent right now!'
+                # if node_require not in file_name:
+                #     reply = f'Your wanted file is not in the Bittorrent right now!'
 
-                    #self.node_socket.sendall(reply.encode('utf-8'))
-                    send_simple_message(self.node_socket,reply,True)
-                else:
+                #     #self.node_socket.sendall(reply.encode('utf-8'))
+                #     send_simple_message(self.node_socket,reply,True)
+                # else:
 
-                    host,port = next(iter(file_name[node_require]))
-                    reply = f'{host}:{port}'
+                #     host,port = next(iter(file_name[node_require]))
+                #     reply = f'{host}:{port}'
 
-                    #self.node_socket.sendall(reply.encode('utf-8'))
-                    send_simple_message()
+                #     #self.node_socket.sendall(reply.encode('utf-8'))
+                #     send_simple_message()
+
+                if node_require == 'ask_seeder_ip':
+                    self.ask_seeder_ip()
+                if node_require == 'update_the_table':
+                    self.update_the_table()
+                    
 
         except Exception as e:
             print(f"Error: {e}")
         finally:
             self.node_socket.close()
             print(f'Close connection from {self.addr}')
+    def update_the_table(self):
+        table_transform = receive_simple_message(self.node_socket,False)
+
+        table = pickle.loads(table_transform)
+
+        for key in table:
+            file_name[key].add(self.addr)
+    
+
+    def ask_seeder_ip(self):
+        print(1)
+
+        update_information_transform = receive_simple_message(self.node_socket,False)
+
+        update_information = pickle.loads(update_information_transform)
+        print(2)
+
+        temporary_table: Dict[Tuple[bytes,int], Any] = {}
+
+        for key in update_information:
+            temporary_table[key] = file_name[key]
+
+        print(3)
+
+        temporary_table = dict(sorted(temporary_table.items(), key=lambda item: len(item[1])))
+
+        used_addr: set = set()
+
+        print(4)
+
+        for key,ip_set in temporary_table.items():
+            print(5)
+            for i in ip_set:
+                print(6)
+                if i not in used_addr:
+                    print(7)
+                    update_information[key] = i
+                    used_addr.add(i)
+
+                    print(8)
+                    break
+
+        return_update_information = pickle.dumps(update_information)
+
+        send_simple_message(self.node_socket,return_update_information,False)
+
+
                 
     def broadcast(message, sender_socket):
         for i in node_socket_list:
@@ -135,9 +189,10 @@ class handle_internet_process(threading.Thread):
         torrent_content = receive_simple_message(self.handle_internet_socket,False)
 
         #ip_port_addr = self.handle_internet_socket.recv(1024*512).encode('utf-8')
-        ip_port_addr_json = receive_simple_message(self.handle_internet_socket,True)
+        ip_port_addr_json = receive_simple_message(self.handle_internet_socket,False)
 
-        ip_port_addr = tuple(json.loads(ip_port_addr_json))
+        #ip_port_addr = tuple(json.loads(ip_port_addr_json))
+        ip_port_addr = pickle.loads(ip_port_addr_json)
 
         torrent_name_temp = f'temp_file.torrent'
 
@@ -159,20 +214,16 @@ class handle_internet_process(threading.Thread):
             
             part_size = 512 * 1024
             num_part = (file_size + part_size - 1) // part_size
-            hash_key = bytes(pieces_hash[i]) if isinstance(pieces_hash[i], list) else pieces_hash[i]
-
-            if hash_key not in file_name:
-                file_name[hash_key] = {}
 
             for index in range(num_part):
-                if index not in file_name[hash_key]:
-                    file_name[hash_key][index] = set()
+                if (pieces_hash[i],index) not in file_name:
+                    file_name[(pieces_hash[i],index)] = set()
 
-                if ip_port_addr not in file_name[hash_key][index]:
-                    file_name[hash_key][index].add(ip_port_addr)
+                if ip_port_addr not in file_name[(pieces_hash[i],index)]:
+                    file_name[(pieces_hash[i],index)].add(ip_port_addr)
 
 
-        #pprint.pprint(file_name)
+        pprint.pprint(file_name)
         print(f'Đã nhận thông tin cập nhật từ {ip_port_addr}')
 
         #os.remove(torrent_name_temp)

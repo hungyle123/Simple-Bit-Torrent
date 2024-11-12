@@ -3,6 +3,7 @@ import json
 import socket
 from collections import defaultdict
 import os
+import pickle
 
 magnet_link = {}
 
@@ -248,8 +249,9 @@ class client_process(threading.Thread):
         send_simple_message(self.tracker_socket,torrent_content,False)
 
         #self.tracker_socket.sendall(self.addr.decode('utf-8'))
-        json_addr = json.dumps(self.addr)
-        send_simple_message(self.tracker_socket,json_addr,True)
+        #json_addr = json.dumps(self.addr)
+        addr = pickle.dumps(self.addr)
+        send_simple_message(self.tracker_socket,addr,False)
 
         print('Đã chuyển tiếp qua cho tracker')
 
