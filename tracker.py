@@ -12,6 +12,13 @@ import pickle
 node_socket_list = []
 file_name: Dict[Tuple[bytes,int], Set] = {}
 
+def get_ip_address():
+    # Tạo một socket kết nối giả để lấy IP gắn với mạng hiện tại
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("8.8.8.8", 80))  # Kết nối tới một địa chỉ IP bên ngoài
+        ip_address = s.getsockname()[0]  # Lấy địa chỉ IP gắn với kết nối
+    return ip_address
+
 def receive_simple_message(a_socket, decode_or_not):
     while True:
         raw_size = a_socket.recv(8)
@@ -191,8 +198,8 @@ class handle_internet_process(threading.Thread):
 
                 
 class Tracker:
-    def __init__(self, host = 'localhost', port = 1235):
-        self.host = host
+    def __init__(self, host = 'localhost', port = 5001):
+        self.host = get_ip_address()
         self.port = port
         self.tracker_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # AF_INET là IPV4 AFINET6 là IPV6, SOCK_STREAM <=> TCP; SOCK_DGRAM <=> UDP
@@ -201,11 +208,11 @@ class Tracker:
 
         #######
         self.interneting_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        to_internet_socket = handle_internet_process(self.interneting_socket,'localhost',1234)
+        to_internet_socket = handle_internet_process(self.interneting_socket,self.host,5000)
         to_internet_socket.start()
         ######  
 
-        print("Server is running now!")
+        print(f"Server is running now! {self.host}:{self.port}")
 
         while True:
             node_socket, addr = self.tracker_socket.accept()

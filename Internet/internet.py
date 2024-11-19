@@ -10,6 +10,13 @@ magnet_link = {}
 import hashlib
 import bencodepy
 
+def get_ip_address():
+    # Tạo một socket kết nối giả để lấy IP gắn với mạng hiện tại
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("8.8.8.8", 80))  # Kết nối tới một địa chỉ IP bên ngoài
+        ip_address = s.getsockname()[0]  # Lấy địa chỉ IP gắn với kết nối
+    return ip_address
+
 def receive_simple_message(a_socket, decode_or_not):
     while True:
         raw_size = a_socket.recv(8)
@@ -259,13 +266,13 @@ class client_process(threading.Thread):
 
 
 class Server:
-    def __init__(self, host = 'localhost', port = 1234):
-        self.host = host
+    def __init__(self, host = 'localhost', port = 5000):
+        self.host = get_ip_address()
         self.port = port
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.bind((self.host,self.port))
         self.server_socket.listen(100)
-        print("Welcome to the Computer Network!")
+        print(f"Welcome to the Computer Network! {self.host}:{self.port}")
         print()
 
         tracker_socket,tracker_addr = self.server_socket.accept()

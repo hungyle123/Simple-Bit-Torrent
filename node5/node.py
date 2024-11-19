@@ -17,6 +17,16 @@ hash_addr: Dict[Tuple[bytes,int], str] = {}
 already_received: Dict[Tuple[bytes,int], Any] = {}
 not_yet_received: Dict[Tuple[bytes,int], Any] = {}
 
+ip_server = '10.128.219.33'
+
+def get_ip_address():
+    # Tạo một socket kết nối giả để lấy IP gắn với mạng hiện tại
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+        s.connect(("8.8.8.8", 80))  # Kết nối tới một địa chỉ IP bên ngoài
+        ip_address = s.getsockname()[0]  # Lấy địa chỉ IP gắn với kết nối
+    return ip_address
+
+
 def receive_simple_message(a_socket, decode_or_not):
     while True:
         raw_size = a_socket.recv(8)
@@ -63,9 +73,6 @@ def receive_simple_number(a_socket):
 
 def send_simple_number(a_socket,number):
     a_socket.sendall(number.to_bytes(8,'big'))
-
-
-
 
 ####################################################
 class uploading(threading.Thread):
@@ -139,6 +146,7 @@ class uploading_server(threading.Thread):  # chưa sửa
     def __init__(self, node_host = 'localhost', node_port = 1):
         threading.Thread.__init__(self)
         self.upload = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        node_host = get_ip_address()
         self.upload.bind((node_host,node_port))
         self.upload.listen(20)
 
@@ -150,8 +158,6 @@ class uploading_server(threading.Thread):  # chưa sửa
             new_upload = uploading(upload_socket,addr)
 
             new_upload.start()
-
-        
 
 ####################################################
 
@@ -285,9 +291,9 @@ def create_torrent(input_path, tracker_url):
     return encoded_torrent
 
 class internet_process(threading.Thread):
-    def __init__(self, host='localhost', port=1234):
+    def __init__(self, host='localhost', port=5000):
         threading.Thread.__init__(self)
-        self.host = host
+        self.host = ip_server
         self.port = port
         self.node_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -398,9 +404,9 @@ class internet_process(threading.Thread):
 
 
 class node_process_tracker(threading.Thread):
-    def __init__(self, this_ip, this_port,host = 'localhost', port = 1235):
+    def __init__(self, this_ip, this_port,host = 'localhost', port = 5001):
         threading.Thread.__init__(self)
-        self.host = host
+        self.host = ip_server
         self.port = port
         self.this_ip = this_ip
         self.this_port = this_port
@@ -569,11 +575,11 @@ class node_process_tracker(threading.Thread):
 class Node:
     def __init__(self, host = 'localhost', port = 1234):
         
-        node_internet_process = internet_process(host,port)
+        node_internet_process = internet_process(host)
 
         #this_ip,this_port = node_internet_process.node_socket.getsockname()
 
-        node_tracker_process = node_process_tracker(host,1235)
+        node_tracker_process = node_process_tracker(host)
 
         node_internet_process.start()
         node_tracker_process.start()
@@ -591,7 +597,7 @@ from tkinter import ttk
 from tkinter import scrolledtext
 
 class NodeApp:
-    def __init__(self, host='localhost', port=1234):
+    def __init__(self, host='localhost'):
         self.window = tk.Tk()
         self.window.title("Multi-threaded Node Application")
 
@@ -611,9 +617,9 @@ class NodeApp:
         self.setup_selection_frame()
 
         # Start the internet and tracker processes
-        self.inet_process = internet_process(host, port)
+        self.inet_process = internet_process(host)
         this_ip,this_port = self.inet_process.node_socket.getsockname()
-        self.tracker_process = node_process_tracker(this_ip,this_port,host, 1235)
+        self.tracker_process = node_process_tracker(this_ip,this_port)
         self.inet_process.start()
         self.tracker_process.start()
         self.the_server_upload = uploading_server(this_ip,this_port)
@@ -741,8 +747,12 @@ class NodeApp:
         self.listbox.delete(0, tk.END)
         
         # Populate listbox with new keys
-        for key in self.data.keys():
-            self.listbox.insert(tk.END, key)
+        def update():
+            for key in self.data.keys():
+                self.listbox.insert(tk.END, key)
+                self.window.update_idletasks()  # Update the UI incrementally
+
+        threading.Thread(target=update, daemon=True).start()
 
     def on_key_select(self, event):
         # Get selected key from listbox
