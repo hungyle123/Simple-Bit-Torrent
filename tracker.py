@@ -72,21 +72,7 @@ class node_process(threading.Thread):
 
         try:
             while True:
-                #node_require = self.node_socket.recv(1024*512).decode('utf-8')
                 node_require = receive_simple_message(self.node_socket,True)
-                
-                # if node_require not in file_name:
-                #     reply = f'Your wanted file is not in the Bittorrent right now!'
-
-                #     #self.node_socket.sendall(reply.encode('utf-8'))
-                #     send_simple_message(self.node_socket,reply,True)
-                # else:
-
-                #     host,port = next(iter(file_name[node_require]))
-                #     reply = f'{host}:{port}'
-
-                #     #self.node_socket.sendall(reply.encode('utf-8'))
-                #     send_simple_message()
 
                 if node_require == 'ask_seeder_ip':
                     self.ask_seeder_ip()
@@ -109,36 +95,24 @@ class node_process(threading.Thread):
     
 
     def ask_seeder_ip(self):
-        print(1)
-
         update_information_transform = receive_simple_message(self.node_socket,False)
 
         update_information = pickle.loads(update_information_transform)
-        print(2)
 
         temporary_table: Dict[Tuple[bytes,int], Any] = {}
 
         for key in update_information:
             temporary_table[key] = file_name[key]
 
-        print(3)
-
         temporary_table = dict(sorted(temporary_table.items(), key=lambda item: len(item[1])))
 
         used_addr: set = set()
 
-        print(4)
-
         for key,ip_set in temporary_table.items():
-            print(5)
             for i in ip_set:
-                print(6)
                 if i not in used_addr:
-                    print(7)
                     update_information[key] = i
                     used_addr.add(i)
-
-                    print(8)
                     break
 
         return_update_information = pickle.dumps(update_information)
@@ -180,24 +154,11 @@ class handle_internet_process(threading.Thread):
             print(f'Close connection from internet')
 
     def store_information(self):
-        # torrent_size = int.from_bytes(self.handle_internet_socket.recv(8),'big')
-
-        # torrent_content = b""
-        # while len(torrent_content) < torrent_size:
-        #     torrent_content += self.handle_internet_socket.recv(1024*512)
-
         torrent_content = receive_simple_message(self.handle_internet_socket,False)
 
-        #ip_port_addr = self.handle_internet_socket.recv(1024*512).encode('utf-8')
         ip_port_addr_json = receive_simple_message(self.handle_internet_socket,False)
 
-        #ip_port_addr = tuple(json.loads(ip_port_addr_json))
         ip_port_addr = pickle.loads(ip_port_addr_json)
-
-        torrent_name_temp = f'temp_file.torrent'
-
-        # with open(torrent_name_temp,'wb') as f:
-        #     f.write(torrent_content)
 
         print(f"Reading the torrent_content")
 
@@ -223,7 +184,7 @@ class handle_internet_process(threading.Thread):
                     file_name[(pieces_hash[i],index)].add(ip_port_addr)
 
 
-        pprint.pprint(file_name)
+        #pprint.pprint(file_name)
         print(f'Đã nhận thông tin cập nhật từ {ip_port_addr}')
 
         #os.remove(torrent_name_temp)
@@ -248,17 +209,6 @@ class Tracker:
 
         while True:
             node_socket, addr = self.tracker_socket.accept()
-
-            # data = node_socket.recv(1024*512).decode('utf-8')
-
-            # file_list = json.loads(data)
-
-            # for f in file_list:
-            #     if f not in file_name:
-            #         file_name[f] = set()  # Khởi tạo tập hợp nếu tệp chưa tồn tại
-            #     file_name[f].add(addr)
-            #     print(f)
-            
             one_node_socket = node_process(node_socket,addr)    
             one_node_socket.start()
 

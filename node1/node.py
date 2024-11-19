@@ -2,13 +2,11 @@ import threading
 import os
 import json
 import socket
-import base64
 import time
 import tkinter as tk
 from tkinter import scrolledtext, filedialog
-from typing import Dict, List, Set, Any, Tuple
+from typing import Dict, Set, Any, Tuple
 import pickle
-import mimetypes
 
 current_thread = 'internet'
 lock = threading.Lock()
@@ -18,14 +16,6 @@ hash_addr: Dict[Tuple[bytes,int], str] = {}
 
 already_received: Dict[Tuple[bytes,int], Any] = {}
 not_yet_received: Dict[Tuple[bytes,int], Any] = {}
-
-def is_binary_file(filename):
-    mime_type, _ = mimetypes.guess_type(filename)
-    # MIME types thường bắt đầu với "text" hoặc "application"
-    if mime_type is not None:
-        return not mime_type.startswith("text")
-    # Nếu không đoán được loại MIME, giả định đó là file nhị phân
-    return True
 
 def receive_simple_message(a_socket, decode_or_not):
     while True:
@@ -74,9 +64,6 @@ def receive_simple_number(a_socket):
 def send_simple_number(a_socket,number):
     a_socket.sendall(number.to_bytes(8,'big'))
 
-
-
-
 ####################################################
 class uploading(threading.Thread):
     def __init__(self, upload_socket, addr):
@@ -102,7 +89,9 @@ class uploading(threading.Thread):
 
         information = pickle.loads(information_change)
 
-        key_hash,key_num_part,path_name,name_torrent,file_type = information
+        key_hash,key_num_part,path_name,name_torrent = information
+
+        name_torrent = name_torrent.decode('utf-8')
 
         return_content = None
 
@@ -118,19 +107,14 @@ class uploading(threading.Thread):
 
                 return_content = f.read(chunk_size)
 
-            
-        if file_type == True:
-            send_simple_message(self.upload_socket,return_content,False)
-        else:
-            send_simple_message(self.upload_socket,return_content,True)
+        send_simple_message(self.upload_socket,return_content,False)
 
     def file_mode(self):
-        print('test1')
         information_change = receive_simple_message(self.upload_socket,False)
 
         information = pickle.loads(information_change)
 
-        key_hash,key_num_part,path_name,name_torrent,file_type = information
+        key_hash,key_num_part,path_name,name_torrent = information
 
         return_content = None
 
@@ -146,14 +130,7 @@ class uploading(threading.Thread):
 
                 return_content = f.read(chunk_size)
 
-        print('test2')
-        if file_type == True:
-            print('test3')
-            send_simple_message(self.upload_socket,return_content,False)
-        else:
-            print('test3')
-            #send_simple_message(self.upload_socket,return_content,True)
-            send_simple_message(self.upload_socket,return_content,False)
+        send_simple_message(self.upload_socket,return_content,False)
 
 class uploading_server(threading.Thread):  # chưa sửa
     def __init__(self, node_host = 'localhost', node_port = 1):
@@ -171,8 +148,6 @@ class uploading_server(threading.Thread):  # chưa sửa
 
             new_upload.start()
 
-        
-
 ####################################################
 
 class downloading(threading.Thread):
@@ -186,17 +161,14 @@ class downloading(threading.Thread):
         self.download_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         #self.download_socket.bind((this_host,this_port))
         self.download_socket.connect((connect_to_host,connect_to_port))
-        print(key)
         print(f'Connecting to the {(connect_to_host,connect_to_port)} to get the {key[1]} part of file {hash_addr[key]}')
 
 
     def run(self):
 
         if self.folder_or_not == True:
-            print(1)
             self.folder_mode()
         else:
-            print(1)
             self.file_mode()
 
         self.download_socket.close()
@@ -209,46 +181,36 @@ class downloading(threading.Thread):
 
         send_simple_message(self.download_socket,request,True)
 
-        file_type = is_binary_file(hash_addr[self.key[0]])
+        #file_type = is_binary_file(hash_addr[self.key])
 
-        information = (self.key[0],self.key[1],hash_addr[self.key[0]],self.name_torrent,file_type)
+        information = (self.key[0],self.key[1],hash_addr[self.key],self.name_torrent)
 
         information_change = pickle.dumps(information)
 
         send_simple_message(self.download_socket,information_change,False)
 
-        file_content = None
-        if file_type == True:
-            file_content = receive_simple_message(self.download_socket,False)
-        else:
-            file_content = receive_simple_message(self.download_socket,False)
+        
+        file_content = receive_simple_message(self.download_socket,False)
+        
 
         cache_data[(self.key[0],self.key[1])] = file_content
         already_received[(self.key[0],self.key[1])] = (self.this_host,self.this_port)
 
     def file_mode(self):
         request = 'ask_for_file_content_file_mode'
-        print(2)
 
         send_simple_message(self.download_socket,request,True)
 
-        file_type = is_binary_file(hash_addr[self.key])
+        #file_type = is_binary_file(hash_addr[self.key])
 
-        information = (self.key[0],self.key[1],hash_addr[self.key],self.name_torrent,file_type)
+        information = (self.key[0],self.key[1],hash_addr[self.key],self.name_torrent)
 
         information_change = pickle.dumps(information)
 
-        print(3)
-
         send_simple_message(self.download_socket,information_change,False)
 
-        print(4)
+        file_content = receive_simple_message(self.download_socket,False)
 
-        file_content = None
-        if file_type == True:
-            file_content = receive_simple_message(self.download_socket,False)
-        else:
-            file_content = receive_simple_message(self.download_socket,False)
 
         cache_data[(self.key[0],self.key[1])] = file_content
         already_received[(self.key[0],self.key[1])] = (self.this_host,self.this_port)
@@ -351,7 +313,7 @@ class internet_process(threading.Thread):
 
             magnet_link = json.loads(data.decode('utf-8'))  # Giải mã dữ liệu nhận được và chuyển đổi từ JSON sang dictionary
 
-            print("Received torrent list:", magnet_link)
+            print("Received torrent list")
             return magnet_link
         
         except Exception as e:
@@ -374,8 +336,6 @@ class internet_process(threading.Thread):
             file_have = []
             current_dir = os.path.dirname(os.path.abspath(__file__))
             current_file = os.path.basename(__file__)
-
-            print(current_dir)
 
             for f in os.listdir(current_dir):
                 if(f != current_file):
@@ -431,8 +391,6 @@ class internet_process(threading.Thread):
 
         print(f"Đã lưu file torrent tại {file_path}.")
 
-        
-
 
 class node_process_tracker(threading.Thread):
     def __init__(self, this_ip, this_port,host = 'localhost', port = 1235):
@@ -469,6 +427,8 @@ class node_process_tracker(threading.Thread):
             self.node_to_tracker.close()
 
     def ask_for_the_list_ip_file(self,torrent_path):
+        global cache_data
+        global hash_addr
 
         update_information: Dict[Tuple[bytes,int], Set] = {}
 
@@ -500,20 +460,36 @@ class node_process_tracker(threading.Thread):
                 for index in range(num_part):
                     cache_data[(piece_hash[i],index)] = None
                     hash_addr[(piece_hash[i],index)] = torrent_content[b'info'][b'files'][i][b'path'].decode('utf-8')
-            
 
             update_information = cache_data
-
-            print(1)
 
             self.process_taking_file(update_information,total_num_part,folder_or_not,torrent_content[b'info'][b'name'])
 
             for key in piece_hash:
                 data = self.retrieve_file_data(key,cache_data)
 
-                with open('temp', 'wb') as f:
-                    f.write(data)
+                if folder_or_not == False:
+                    self.write_file(data,torrent_content[b'info'][b'name'])
+                else:
+                    self.write_folder(data,torrent_content[b'info'][b'name'],hash_addr[(key,0)])
 
+        cache_data = {}
+        hash_addr = {}
+        already_received = {}
+        not_yet_received = {}
+    
+    def write_file(self,data,name_file):
+        with open(name_file, 'wb') as f:
+            f.write(data)
+
+    def write_folder(self,data,name_folder,path_file):
+        name_folder = name_folder.decode('utf-8')
+        full_path = os.path.join(name_folder, path_file)
+
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+        with open(full_path, 'wb') as file:
+            file.write(data)
 
     def retrieve_file_data(self, file_id: bytes, cache_data: Dict[Tuple[bytes, int], Any]) -> bytes:
         # Lấy tất cả các phần dữ liệu liên quan đến file_id, gồm cả part và data
@@ -536,17 +512,10 @@ class node_process_tracker(threading.Thread):
 
             received_ip_list = self.send_another_update(update_information)
 
-            print(2)
-
             for key in received_ip_list:
                 if received_ip_list[key] == None:
                     not_yet_received[key] = None
                 else:
-
-                    print(received_ip_list[key][0])
-                    print(type(received_ip_list[key][0]))
-                    print(received_ip_list[key][1])
-                    print(type(received_ip_list[key][1]))
                     thread_download = downloading(received_ip_list[key][0],received_ip_list[key][1],self.this_ip,self.this_port,key,folder_or_not,name_torrent)
 
                     thread_download.start()
@@ -555,9 +524,6 @@ class node_process_tracker(threading.Thread):
 
             for i in threads:
                 i.join()
-
-
-            print(3)
 
             total_num_part -= len(threads)
 
@@ -770,8 +736,12 @@ class NodeApp:
         self.listbox.delete(0, tk.END)
         
         # Populate listbox with new keys
-        for key in self.data.keys():
-            self.listbox.insert(tk.END, key)
+        def update():
+            for key in self.data.keys():
+                self.listbox.insert(tk.END, key)
+                self.window.update_idletasks()  # Update the UI incrementally
+
+        threading.Thread(target=update, daemon=True).start()
 
     def on_key_select(self, event):
         # Get selected key from listbox
@@ -823,8 +793,6 @@ class NodeApp:
             # Sau khi xử lý, quay lại giao diện internet
             self.show_frame(self.internet_frame)
 
-            # Nếu bạn muốn sử dụng giá trị này để gửi file, ví dụ:
-            # self.send_selected_file(self.selected_torrent)
         else:
             print("No selection made.")
 
