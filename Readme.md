@@ -43,18 +43,6 @@ This project simulates a basic BitTorrent system using Python for peer-to-peer (
       python node.py
       ```
 
-## ✅ Features
-
-- Upload and download files via `.torrent` protocol
-- Peer discovery via tracker
-- Simple file sharing with multiple nodes
-
-## 📌 Notes
-
-- Use folders `node1` to `node6` as examples for different peers.
-- Files `read.py`, `tr.py`, `t.py` are test or legacy versions (optional).
-
-## 🧑 Author
 
 - Developed by [hungyle123](https://github.com/hungyle123)
 
